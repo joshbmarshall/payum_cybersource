@@ -12,10 +12,12 @@ use Payum\Core\GatewayAwareTrait;
 use Payum\Core\Reply\HttpResponse;
 use Payum\Core\Request\GetHttpRequest;
 use Payum\Core\Request\RenderTemplate;
+use Cognito\PayumCybersource\Api;
 
-class ObtainNonceAction implements ActionInterface, GatewayAwareInterface {
+class ObtainNonceAction implements ActionInterface, GatewayAwareInterface, \Payum\Core\ApiAwareInterface
+{
     use GatewayAwareTrait;
-
+    use \Payum\Core\ApiAwareTrait;
 
     /**
      * @var string
@@ -25,20 +27,24 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface {
     /**
      * @param string $templateName
      */
-    public function __construct(string $templateName) {
+    public function __construct(string $templateName)
+    {
         $this->templateName = $templateName;
+        $this->apiClass = Api::class;
     }
 
     /**
      * {@inheritDoc}
      */
-    public function execute($request) {
+    public function execute($request)
+    {
         /** @var $request ObtainNonce */
         RequestNotSupportedException::assertSupports($this, $request);
 
         $model = ArrayObject::ensureArrayObject($request->getModel());
 
-        if ($model['card']) {
+        if ($model['card'])
+        {
             throw new LogicException('The token has already been set.');
         }
         $uri = \League\Uri\Http::createFromServer($_SERVER);
@@ -46,12 +52,72 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface {
         $getHttpRequest = new GetHttpRequest();
         $this->gateway->execute($getHttpRequest);
         // Received payment intent information from Stripe
-        if (isset($getHttpRequest->request['payment_intent'])) {
+        if (isset($getHttpRequest->request['payment_intent']))
+        {
             $model['nonce'] = $getHttpRequest->request['payment_intent'];
             return;
         }
-        // Comma separate list of enabled payment types for this transaction - get list of payment types at https://stripe.com/docs/api/payment_methods/object#payment_method_object-type
-        $limit_payment_type = $model['limit_payment_type'] ?? '';
+
+        // Get JWT
+
+        $targetOrigins = [$uri->withPath('')->withFragment('')->withQuery('')->__toString()];
+        $allowedCardNetworks = [
+            'VISA',
+            'MASTERCARD',
+            'AMEX',
+        ];
+
+        $requestObjArr = [
+            'targetOrigins' => $targetOrigins,
+            'clientVersion' => 'v2.0',
+            'allowedCardNetworks' => $allowedCardNetworks,
+            'checkoutApiInitialization' => [
+                'currency' => $model['currency'],
+                'amount' => (string)$model['amount'],
+            ]
+        ];
+        $requestObj = new \CyberSource\Model\GenerateCaptureContextRequest($requestObjArr);
+
+        ray($model);
+
+        $config = new \CyberSource\Configuration();
+        $config->setHost(str_replace('https://', '', $this->api->getApiEndpoint()));
+
+        $merchantConfig = new \CyberSource\Authentication\Core\MerchantConfiguration();
+        $merchantConfig->setMerchantID($model['merchant_id']);
+        $merchantConfig->setApiKeyID($model['access_key']);
+        $merchantConfig->setSecretKey($model['secret_key']);
+        $merchantConfig->setAuthenticationType('HTTP_SIGNATURE');
+        $merchantConfig->setUseMetaKey(false);
+
+        $apiClient = new \CyberSource\ApiClient($config, $merchantConfig);
+        $apiInstance = new \CyberSource\Api\MicroformIntegrationApi($apiClient);
+
+        try
+        {
+            $apiResponse = $apiInstance->generateCaptureContext($requestObj);
+        }
+        catch (\Cybersource\ApiException $e)
+        {
+            print_r($e->getResponseBody());
+            print_r($e->getMessage());
+            exit;
+        }
+        try
+        {
+            $header = json_decode(base64_decode(substr($apiResponse[0], 0, strpos($apiResponse[0], '.'))), true);
+            // Get shared key
+            $public_key = json_decode(file_get_contents($this->api->getApiEndpoint() . '/flex/v2/public-keys/' . $header['kid']), true);
+            $jwt = \Firebase\JWT\JWT::decode($apiResponse[0], \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]]), ['RS256']);
+        }
+        catch (\Exception $e)
+        {
+            print_r($e->getMessage());
+            exit;
+        }
+        dump($jwt);
+
+        exit;
         $paymentIntentData = [
             'amount' => round($model['amount'] * pow(10, $model['currencyDigits'])),
             'shipping' => $model['shipping'],
@@ -60,14 +126,6 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface {
             'statement_descriptor' => $model['statement_descriptor_suffix'],
             'description' => $model['description'],
         ];
-        if ($limit_payment_type) {
-            $paymentIntentData['payment_method_types'] = explode(',', $limit_payment_type);
-        } else {
-            $paymentIntentData['automatic_payment_methods'] = [
-                'enabled' => true,
-                'allow_redirects' => 'always',
-            ];
-        }
 
         $model['stripePaymentIntent'] = \Stripe\PaymentIntent::create($paymentIntentData);
         $payment_element_options = $model['payment_element_options'] ?? (object)[];
@@ -88,7 +146,8 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface {
     /**
      * {@inheritDoc}
      */
-    public function supports($request) {
+    public function supports($request)
+    {
         return
             $request instanceof ObtainNonce &&
             $request->getModel() instanceof \ArrayAccess;

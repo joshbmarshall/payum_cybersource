@@ -8,7 +8,7 @@ use Cognito\PayumCybersource\Action\StatusAction;
 use Payum\Core\Bridge\Spl\ArrayObject;
 use Payum\Core\GatewayFactory;
 
-class StripeElementsGatewayFactory extends GatewayFactory
+class CybersourceGatewayFactory extends GatewayFactory
 {
     /**
      * {@inheritDoc}
@@ -16,8 +16,8 @@ class StripeElementsGatewayFactory extends GatewayFactory
     protected function populateConfig(ArrayObject $config)
     {
         $config->defaults([
-            'payum.factory_name' => 'stripe_elements',
-            'payum.factory_title' => 'stripe_elements',
+            'payum.factory_name' => 'cybersource_flexible_token',
+            'payum.factory_title' => 'cybersource_flexible_token',
 
             'payum.template.obtain_nonce' => "@PayumCybersource/Action/obtain_nonce.html.twig",
 
