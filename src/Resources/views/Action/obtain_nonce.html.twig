@@ -2,18 +2,64 @@
 
 {% block payum_body %}
 
-  {% block stripe_payment_form %}
+  {% block payment_form %}
   <!-- Display a payment form -->
+  {% if imgUrl %}
+    <img style="max-width: 100%; height: auto;" src="{{ imgUrl }}" />
+  {% endif %}
+  {% if img2Url %}
+    <img style="max-width: 100%; height: auto;" src="{{ img2Url }}" />
+  {% endif %}
+  <div id="payment-element">
+    <!--Stripe.js injects the Payment Element-->
+  </div>
+  <div>
+    <!-- Payment form -->
+    <h1>Checkout</h1>
+    <div id="errors-output" role="alert"></div>
+    <form id="my-sample-form" method="post">
+        <div class="form-group">
+            <label for="cardholderName">Name</label>
+            <input id="cardholderName" class="form-control" name="cardholderName" placeholder="Name on the card">
+            <label id="cardNumber-label">Card Number</label>
+            <div id="number-container" class="form-control"></div>
+            <label for="securityCode-container">Security Code</label>
+            <div id="securityCode-container" class="form-control"></div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group col-md-6">
+                <label for="expMonth">Expiry month</label>
+                <select id="expMonth" class="form-control">
+                    <option>01</option>
+                    <option>02</option>
+                    <option>03</option>
+                    <option>04</option>
+                    <option>05</option>
+                    <option>06</option>
+                    <option>07</option>
+                    <option>08</option>
+                    <option>09</option>
+                    <option>10</option>
+                    <option>11</option>
+                    <option>12</option>
+                </select>
+            </div>
+            <div class="form-group col-md-6">
+                <label for="expYear">Expiry year</label>
+                <select id="expYear" class="form-control">
+                    <option>2021</option>
+                    <option>2022</option>
+                    <option>2023</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="button" id="pay-button" class="btn btn-primary">Pay</button>
+        <input type="hidden" id="flexresponse" name="flexresponse">
+    </form>
+  </div>
   <form id="payment-form">
-    {% if imgUrl %}
-			<img style="max-width: 100%; height: auto;" src="{{ imgUrl }}" />
-    {% endif %}
-    {% if img2Url %}
-			<img style="max-width: 100%; height: auto;" src="{{ img2Url }}" />
-    {% endif %}
-    <div id="payment-element">
-      <!--Stripe.js injects the Payment Element-->
-    </div>
     <button id="submit">
       <div class="spinner hidden" id="spinner"></div>
       <span id="button-text">
@@ -29,10 +75,66 @@
   </form>
   {% endblock %}
 
-  {% block stripe_init_js %}
-    <script src="https://js.stripe.com/v3/"></script>
+  {% block init_js %}
+    <script src="{{ libraryUrl }}"></script>
     <script type="text/javascript">
-    const stripe = Stripe('{{ publishable_key }}');
+
+        // Variables from the HTML form
+        var form = document.querySelector('#my-sample-form');
+        var payButton = document.querySelector('#pay-button');
+        var flexResponse = document.querySelector('#flexresponse');
+        var expMonth = document.querySelector('#expMonth');
+        var expYear = document.querySelector('#expYear');
+        var errorsOutput = document.querySelector('#errors-output');
+
+        // the capture context that was requested server-side for this transaction
+    var captureContext = '{{ captureContextRaw }}'
+        // custom styles that will be applied to each field we create using Microform
+        var myStyles = {
+          'input': {
+            'font-size': '14px',
+            'font-family': 'helvetica, tahoma, calibri, sans-serif',
+            'color': '#555'
+          },
+          ':focus': { 'color': 'blue' },
+          ':disabled': { 'cursor': 'not-allowed' },
+          'valid': { 'color': '#3c763d' },
+          'invalid': { 'color': '#a94442' }
+        };
+        // setup Microform
+        var flex = new Flex(captureContext);
+        var microform = flex.microform({ styles: myStyles });
+        var number = microform.createField('number', { placeholder: 'Enter card number' });
+        var securityCode = microform.createField('securityCode', { placeholder: '•••' });
+        number.load('#number-container');
+        securityCode.load('#securityCode-container');
+
+
+        // Configuring a Listener for the Pay button
+      payButton.addEventListener('click', function() {
+
+        // Compiling MM & YY into optional paramiters
+          var options = {
+            expirationMonth: document.querySelector('#expMonth').value,
+            expirationYear: document.querySelector('#expYear').value
+          };
+        //
+          microform.createToken(options, function (err, token) {
+            if (err) {
+              // handle error
+              console.error(err);
+              errorsOutput.textContent = err.message;
+            } else {
+              // At this point you may pass the token back to your server as you wish.
+              // In this example we append a hidden input to the form and submit it.
+              console.log(JSON.stringify(token));
+              flexResponse.value = JSON.stringify(token);
+              form.submit();
+            }
+          });
+        });
+
+    if (false) {
 
     let elements
 
@@ -48,8 +150,6 @@
       elements = stripe.elements({
         clientSecret: '{{ client_secret }}',
       });
-
-      const paymentElementOptions = {{ payment_element_options|raw }}
 
       const paymentElement = elements.create("payment", paymentElementOptions);
       paymentElement.mount("#payment-element");
@@ -134,6 +234,7 @@
         document.querySelector("#spinner").classList.add("hidden");
         document.querySelector("#button-text").classList.remove("hidden");
       }
+    }
     }
     </script>
   {% endblock %}

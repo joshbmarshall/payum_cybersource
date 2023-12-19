@@ -35,7 +35,6 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface {
             return;
         }
 
-        \Stripe\Stripe::setApiKey($this->config['secret_key']);
         $model['merchant_id'] = $this->config['merchant_id'];
         $model['access_key'] = $this->config['access_key'];
         $model['secret_key'] = $this->config['secret_key'];
@@ -48,6 +47,15 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface {
         $this->gateway->execute($obtainNonce);
 
         if (!$model->offsetExists('status')) {
+            // Validate the token from the form
+            $token = \Firebase\JWT\JWT::decode(str_replace('"', '', $model['nonce']), \Firebase\JWT\JWK::parseKeySet(['keys' => [$model['public_key']]]), ['RS256']);
+            dump($token);
+            // Token ok, attempt to capture funds
+
+            exit;
+                $model['status'] = 'failed';
+                $model['error'] = 'failed';
+            if (false) {
             $stripe = new \Stripe\StripeClient($this->config['secret_key']);
             $paymentIntent = $stripe->paymentIntents->retrieve($model['nonce'], []);
             if ($paymentIntent->status == \Stripe\PaymentIntent::STATUS_SUCCEEDED) {
@@ -65,6 +73,7 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface {
                 $model['transactionReference'] = $paymentIntent->latest_charge;
                 $charge = $stripe->charges->retrieve($paymentIntent->latest_charge);
                 $model['stripe_charge_info'] = $charge;
+            }
             }
         }
     }

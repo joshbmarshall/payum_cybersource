@@ -51,10 +51,10 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface, \Payu
 
         $getHttpRequest = new GetHttpRequest();
         $this->gateway->execute($getHttpRequest);
-        // Received payment intent information from Stripe
-        if (isset($getHttpRequest->request['payment_intent']))
+        // Received flex response information from Cybersource
+        if (isset($getHttpRequest->request['flexresponse']))
         {
-            $model['nonce'] = $getHttpRequest->request['payment_intent'];
+            $model['nonce'] = $getHttpRequest->request['flexresponse'];
             return;
         }
 
@@ -78,8 +78,6 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface, \Payu
         ];
         $requestObj = new \CyberSource\Model\GenerateCaptureContextRequest($requestObjArr);
 
-        ray($model);
-
         $config = new \CyberSource\Configuration();
         $config->setHost(str_replace('https://', '', $this->api->getApiEndpoint()));
 
@@ -99,6 +97,7 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface, \Payu
         }
         catch (\Cybersource\ApiException $e)
         {
+            throw new LogicException($e->getMessage());
             print_r($e->getResponseBody());
             print_r($e->getMessage());
             exit;
@@ -108,37 +107,25 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface, \Payu
             $header = json_decode(base64_decode(substr($apiResponse[0], 0, strpos($apiResponse[0], '.'))), true);
             // Get shared key
             $public_key = json_decode(file_get_contents($this->api->getApiEndpoint() . '/flex/v2/public-keys/' . $header['kid']), true);
-            $jwt = \Firebase\JWT\JWT::decode($apiResponse[0], \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]]), ['RS256']);
+            $captureContext = \Firebase\JWT\JWT::decode($apiResponse[0], \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]]), ['RS256']);
+            $model['public_key'] = (array)$captureContext->flx->jwk;
         }
         catch (\Exception $e)
         {
+            throw new LogicException($e->getMessage());
             print_r($e->getMessage());
             exit;
         }
-        dump($jwt);
 
-        exit;
-        $paymentIntentData = [
-            'amount' => round($model['amount'] * pow(10, $model['currencyDigits'])),
-            'shipping' => $model['shipping'],
-            'currency' => $model['currency'],
-            'metadata' => ['integration_check' => 'accept_a_payment'],
-            'statement_descriptor' => $model['statement_descriptor_suffix'],
-            'description' => $model['description'],
-        ];
-
-        $model['stripePaymentIntent'] = \Stripe\PaymentIntent::create($paymentIntentData);
-        $payment_element_options = $model['payment_element_options'] ?? (object)[];
-        $this->gateway->execute($renderTemplate = new RenderTemplate($this->templateName, array(
+        $this->gateway->execute($renderTemplate = new RenderTemplate($this->templateName, [
             'amount' => $model['currencySymbol'] . ' ' . number_format($model['amount'], $model['currencyDigits']),
             'client_secret' => $model['stripePaymentIntent']->client_secret,
-            'publishable_key' => $model['publishable_key'],
             'actionUrl' => $uri->withPath('')->withFragment('')->withQuery('')->__toString() . $getHttpRequest->uri,
+            'libraryUrl' => $captureContext->ctx[0]->data->clientLibrary,
+            'captureContextRaw' => $apiResponse[0],
             'imgUrl' => $model['img_url'],
             'img2Url' => $model['img_2_url'],
-            'payment_element_options' => json_encode($payment_element_options),
-            'billing' => $model['billing'] ?? [],
-        )));
+        ]));
 
         throw new HttpResponse($renderTemplate->getResult());
     }
