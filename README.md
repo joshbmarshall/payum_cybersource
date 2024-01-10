@@ -1,6 +1,7 @@
 # Cybersource Payment Module
 
-The Payum extension to purchase through Cybersource using Flexible Token
+The Payum extension to purchase through Cybersource using Flexible Token.
+Uses the Flex Microform for lower level PCI compliance requirements.
 
 ## Install and Use
 
@@ -26,7 +27,7 @@ $payum = (new PayumBuilder)
     ->addGateway('cybersource', [
         'factory' => 'cybersource',
         'merchant_id' => 'Merchant Id',
-        'api_key_id' => 'Merchant API Key',
+        'access_key' => 'Merchant API Key',
         'secret_key' => 'Merchant Secret Key',
         'img_url' => 'https://path/to/logo/image.jpg',
     ])
@@ -56,13 +57,23 @@ $payment->setDetails([
     'local' => [
         'email' => $email, // Used for the customer to be able to save payment details
     ],
+    'payment_reference' => 'INV-0001',
+    'billing' => [
+        'first_name' => $shopper['first_name'],
+        'last_name' => $shopper['last_name'],
+        'email' => $shopper['email'],
+        'address' => [
+            'line1' => $shopper['billing_address']['line1'],
+            'line2' => $shopper['billing_address']['line2'],
+            'city' => $shopper['billing_address']['city'],
+            'state' => $shopper['billing_address']['state'],
+            'country' => $shopper['billing_address']['country'],
+            'postal_code' => $shopper['billing_address']['postal_code'],
+        ],
+    ],
     'payment_method_options' => [
         'defaultValues' => [
-            'billingDetails' => [
-                'name' => $customer_name,
-                'email' => $customer_email,
-            ], // Optionally prefill some fields for some payment types
-        ],
+        ], // Optionally prefill some fields for some payment types
     ],
 ]);
 $storage->setInternalDetails($payment, $request);
