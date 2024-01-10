@@ -13,48 +13,53 @@
   {% endif %}
   <div id="payment-element">
     <!-- Payment form -->
+
+    <label for="cardholderName">Name</label>
+    <input id="cardholderName" name="cardholderName" placeholder="Name on the card">
+
+    <label id="cardNumber-label">Card Number</label>
+    <div id="number-container"></div>
+
+    <label>Expiry</label>
+    <div>
+        <select id="expMonth" class="form-control">
+            <option>01</option>
+            <option>02</option>
+            <option>03</option>
+            <option>04</option>
+            <option>05</option>
+            <option>06</option>
+            <option>07</option>
+            <option>08</option>
+            <option>09</option>
+            <option>10</option>
+            <option>11</option>
+            <option>12</option>
+        </select>
+    /
+        <select id="expYear" class="form-control">
+            <option>{{ 'now' | date('Y') }}</option>
+            <option>{{ 'now' | date('Y') + 1 }}</option>
+            <option>{{ 'now' | date('Y') + 2 }}</option>
+            <option>{{ 'now' | date('Y') + 3 }}</option>
+            <option>{{ 'now' | date('Y') + 4 }}</option>
+            <option>{{ 'now' | date('Y') + 5 }}</option>
+            <option>{{ 'now' | date('Y') + 6 }}</option>
+            <option>{{ 'now' | date('Y') + 7 }}</option>
+            <option>{{ 'now' | date('Y') + 8 }}</option>
+            <option>{{ 'now' | date('Y') + 9 }}</option>
+        </select>
+    </div>
+
+    <label for="securityCode-container">Security Code</label>
+    <div id="securityCode-container"></div>
+
     <div id="errors-output" role="alert"></div>
-        <div class="form-group">
-            <label for="cardholderName">Name</label>
-            <input id="cardholderName" class="form-control" name="cardholderName" placeholder="Name on the card">
-            <label id="cardNumber-label">Card Number</label>
-            <div id="number-container" class="form-control"></div>
-            <label for="securityCode-container">Security Code</label>
-            <div id="securityCode-container" class="form-control"></div>
-        </div>
 
-        <div class="form-row">
-            <div class="form-group col-md-6">
-                <label for="expMonth">Expiry month</label>
-                <select id="expMonth" class="form-control">
-                    <option>01</option>
-                    <option>02</option>
-                    <option>03</option>
-                    <option>04</option>
-                    <option>05</option>
-                    <option>06</option>
-                    <option>07</option>
-                    <option>08</option>
-                    <option>09</option>
-                    <option>10</option>
-                    <option>11</option>
-                    <option>12</option>
-                </select>
-            </div>
-            <div class="form-group col-md-6">
-                <label for="expYear">Expiry year</label>
-                <select id="expYear" class="form-control">
-                    <option>2024</option>
-                    <option>2025</option>
-                    <option>2026</option>
-                </select>
-            </div>
-        </div>
-
-        <button type="button" id="pay-button" class="btn btn-primary">Pay {{ amount }} now</button>
-        <input type="hidden" id="flexresponse" name="flexresponse">
-      </div>
-    </form>
+    <button type="button" id="pay-button" class="btn btn-primary">Pay {{ amount }} now</button>
+    <input type="hidden" id="flexresponse" name="flexresponse">
+  </div>
+</form>
   {% endblock %}
 
   {% block init_js %}
@@ -69,23 +74,8 @@
         var expYear = document.querySelector('#expYear');
         var errorsOutput = document.querySelector('#errors-output');
 
-        // the capture context that was requested server-side for this transaction
-        var captureContext = '{{ captureContextRaw }}'
-        // custom styles that will be applied to each field we create using Microform
-        var myStyles = {
-          'input': {
-            'font-size': '14px',
-            'font-family': 'helvetica, tahoma, calibri, sans-serif',
-            'color': '#555'
-          },
-          ':focus': { 'color': 'blue' },
-          ':disabled': { 'cursor': 'not-allowed' },
-          'valid': { 'color': '#3c763d' },
-          'invalid': { 'color': '#a94442' }
-        };
-        // setup Microform
-        var flex = new Flex(captureContext);
-        var microform = flex.microform({ styles: myStyles });
+        var flex = new Flex('{{ captureContextRaw }}');
+        var microform = flex.microform();
         var number = microform.createField('number', { placeholder: 'Enter card number' });
         var securityCode = microform.createField('securityCode', { placeholder: '•••' });
         number.load('#number-container');
@@ -94,6 +84,7 @@
 
         // Configuring a Listener for the Pay button
       payButton.addEventListener('click', function() {
+          errorsOutput.textContent = '';
 
         // Compiling MM & YY into optional paramiters
           var options = {
@@ -106,6 +97,7 @@
               // handle error
               console.error(err);
               errorsOutput.textContent = err.message;
+              setTimeout(() => {errorsOutput.textContent = ''}, 3000)
             } else {
               // At this point you may pass the token back to your server as you wish.
               // In this example we append a hidden input to the form and submit it.
@@ -172,6 +164,7 @@
       transition: all 0.2s ease;
       box-shadow: 0px 4px 5.5px 0px rgba(0, 0, 0, 0.07);
       width: 100%;
+      margin-top: 10px;
     }
 
     button:hover {
@@ -181,6 +174,43 @@
     button:disabled {
       opacity: 0.5;
       cursor: default;
+    }
+
+    label {
+      margin-top: 15px;
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    input {
+      width: 100%;
+    }
+
+    input, select, .flex-microform {
+      height: 40px;
+      background: none;
+      padding: 5px;
+      border: 1px solid #aaa;
+      border-radius: 5px;
+      -webkit-transition: background 200ms;
+      transition: background 200ms;
+    }
+
+    .flex-microform-focused {
+      background: lightyellow;
+    }
+
+    .flex-microform-valid {
+      background: #ccffcc;
+    }
+
+    #errors-output {
+      background-color: #ffaaaa;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    #errors-output:empty {
+      display: none;
     }
 
     @media only screen and (max-width: 600px) {

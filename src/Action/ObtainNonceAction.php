@@ -119,7 +119,6 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface, \Payu
 
         $this->gateway->execute($renderTemplate = new RenderTemplate($this->templateName, [
             'amount' => $model['currencySymbol'] . ' ' . number_format($model['amount'], $model['currencyDigits']),
-            'client_secret' => $model['stripePaymentIntent']->client_secret,
             'actionUrl' => $uri->withPath('')->withFragment('')->withQuery('')->__toString() . $getHttpRequest->uri,
             'libraryUrl' => $captureContext->ctx[0]->data->clientLibrary,
             'captureContextRaw' => $apiResponse[0],
