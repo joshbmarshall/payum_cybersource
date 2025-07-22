@@ -24,12 +24,12 @@ $payum = (new PayumBuilder)
     })
 
     ->addGateway('cybersource', [
-        'factory' => 'cybersource',
-        'access_token' => 'Your-access-token',
-        'app_id' => 'Your-app-id',
-        'location_id' => 'Your-location-id',
-        'sandbox' => false,
-        'img_url' => 'https://path/to/logo/image.jpg',
+        'factory'         => 'cybersource',
+        'organisation_id' => 'Your-organisation-id',
+        'key'             => 'Your-key',
+        'shared_secret'   => 'Your-shared-secret',
+        'sandbox'         => false,
+        'img_url'         => 'https://path/to/logo/image.jpg',
     ])
 
     ->getPayum()
@@ -53,89 +53,6 @@ $payment->setNumber(uniqid());
 $payment->setCurrencyCode($currency);
 $payment->setTotalAmount(100); // Total cents
 $payment->setDescription(substr($description, 0, 45));
-$storage->setInternalDetails($payment, $request);
-
-$captureToken = $payum->getTokenFactory()->createCaptureToken('cybersource', $payment, 'done.php');
-$url = $captureToken->getTargetUrl();
-header("Location: " . $url);
-die();
-```
-
-### Request Afterpay payment
-
-Afterpay requires more information about the customer to process the payment
-
-```php
-<?php
-
-use Payum\Core\Request\Capture;
-
-$storage = $payum->getStorage(\Payum\Core\Model\Payment::class);
-$request = [
-    'invoice_id' => 100,
-];
-
-$payment = $storage->create();
-$payment->setNumber(uniqid());
-$payment->setCurrencyCode($currency);
-$payment->setTotalAmount(100); // Total cents
-$payment->setDescription(substr($description, 0, 45));
-$payment->setDetails([
-    'ship_item' => false,
-    'pickup_contact' => [ // Optional if shipping the item
-        'addressLines' => [
-            'Address Line 1',
-            'Address Line 2', // Optional
-        ],
-        'city' => 'Address City',
-        'state' => 'Address State',
-        'postalCode' => 'Address Postal Code',
-        'countryCode' => 'AU',
-        'givenName' => 'Business Name or contact person',
-        'familyName' => '',
-        'email' => 'pickup@email.address', // Optional
-        'phone' => 'Pickup Phone', // Optional
-    ],
-    // merchant_reference is sent to the below api endpoints to assist in identifying the purchase
-    'merchant_reference' => '12345',
-    // Add api endpoint that gets the selected Afterpay address and returns shipping options
-    'afterpay_addresschange_url' => 'https://mysite/afterPayAddress',
-    // Add api endpoint that records which shipping option the user chooses
-    'afterpay_shippingchange_url' => 'https://mysite/afterPayShipping',
-    // Use below if dynamic shipping options not used with callback
-    'afterpay_shipping_options' => [
-        [
-            'amount' => '0.00',
-            'id' => 'shipping-option-1',
-            'label' => 'Free Shipping',
-            'taxLineItems' => [
-                [
-                    'amount' => '0.00',
-                    'label' => 'Tax'
-                ],
-            ],
-            'total' => [
-                'amount' => '15.00', // Needs to be order total including shipping
-                'label' => 'total',
-            ],
-        ],
-        [
-            'amount' => '10.00',
-            'id' => 'shipping-option-2',
-            'label' => 'Standard Shipping',
-            'taxLineItems' => [
-                [
-                    'amount' => '0.91',
-                    'label' => 'Tax'
-                ],
-            ],
-            'total' => [
-                'amount' => '25.00', // Needs to be order total including shipping
-                'label' => 'total',
-            ],
-        ],
-    ],
-]);
 $storage->setInternalDetails($payment, $request);
 
 $captureToken = $payum->getTokenFactory()->createCaptureToken('cybersource', $payment, 'done.php');
@@ -168,6 +85,16 @@ if ($status->isNew() || $status->isCaptured() || $status->isAuthorized()) {
     // the payment has failed or user canceled it.
 }
 ```
+
+## Getting a key
+
+In your Cybersource dashboard, go to Payment Configuration > Key Management
+
+Click Create Key
+
+Choose REST - Shared Secret
+
+Copy the key and shared secret
 
 ## License
 
