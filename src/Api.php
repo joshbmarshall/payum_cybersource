@@ -62,6 +62,6 @@ class Api
      */
     protected function getApiEndpoint()
     {
-        return $this->options['sandbox'] ? 'http://sandbox.example.com' : 'http://example.com';
+        return $this->options['sandbox'] ? 'https://apitest.cybersource.com' : 'https://api.cybersource.com';
     }
 }

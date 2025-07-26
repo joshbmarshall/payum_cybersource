@@ -37,10 +37,28 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         if ($model['status']) {
             return;
         }
+        $uri = \League\Uri\Http::fromServer($_SERVER);
 
-        $model['app_id']      = $this->config['app_id'];
-        $model['location_id'] = $this->config['location_id'];
-        $model['img_url']     = $this->config['img_url'] ?? '';
+        $model['organisation_id'] = $this->config['organisation_id'];
+        $model['key']             = $this->config['key'];
+        $model['shared_secret']   = $this->config['shared_secret'];
+
+        // Get server-side capture context
+        $contextData = $this->doPostRequest('/microform/v2/sessions', [
+            'clientVersion'       => 'v2',
+            'targetOrigins'       => [$uri->getScheme() . '://' . $uri->getHost()],
+            'allowedCardNetworks' => ['VISA', 'MASTERCARD', 'AMEX'],
+            'allowedPaymentTypes' => ['CARD'],
+        ], [
+            'Accept' => 'application/jwt',
+        ]);
+        [$header, $data]     = explode('.', $contextData);
+        $contextHeader       = json_decode(base64_decode($header));
+        $public_key          = $this->doGetRequest('/flex/v2/public-keys/' . $contextHeader->kid);
+        $captureContext      = \Firebase\JWT\JWT::decode($contextData, \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]], 'RS256'));
+        $model['public_key'] = (array) $captureContext->flx->jwk;
+
+        ray($model);
 
         $obtainNonce = new ObtainNonce($request->getModel());
         $obtainNonce->setModel($model);
@@ -104,22 +122,6 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
                 }
                 $order->setLineItems($order_line_items);
 
-                if (isset($model['customer'])) {
-                    $order->setCustomerId($this->getSquareCustomer($client, $model['customer']));
-                }
-
-                if ($order_discount) {
-                    $discount_amount_money = new \Square\Types\Money();
-                    $discount_amount_money->setAmount(round($order_discount * 100));
-                    $discount_amount_money->setCurrency($model['currency']);
-                    $order_line_item_discount = new \Square\Types\OrderLineItemDiscount();
-                    $order_line_item_discount->setUid('discount');
-                    $order_line_item_discount->setName('Discount');
-                    $order_line_item_discount->setAmountMoney($discount_amount_money);
-                    $order_line_item_discount->setScope('ORDER');
-                    $order->setDiscounts([$order_line_item_discount]);
-                }
-
                 $orderbody = new \Square\Types\CreateOrderRequest();
                 $orderbody->setOrder($order);
                 $orderbody->setIdempotencyKey(uniqid());
@@ -171,5 +173,162 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         return
             $request instanceof Capture &&
             $request->getModel() instanceof \ArrayAccess;
+    }
+
+    /**
+     * Get the site to use
+     * @return string
+     */
+    public function basehost()
+    {
+        return $this->config['sandbox'] ? 'apitest.cybersource.com' : 'api.cybersource.com';
+    }
+
+    public function baseurl()
+    {
+        return 'https://' . $this->basehost();
+    }
+
+    public function hashMessageBody($data)
+    {
+        $data              = json_encode($data);
+        $utf8EncodedString = mb_convert_encoding($data, 'UTF-8', mb_detect_encoding($data));
+        $digestEncode      = hash('sha256', $utf8EncodedString, true);
+
+        return 'SHA-256=' . base64_encode($digestEncode);
+    }
+
+    // Signature Creation function
+    public function generateToken($url, $messageBody, $method)
+    {
+        $host = $this->basehost();
+        $date = date('D, d M Y G:i:s ') . 'GMT';
+        if ($method == 'get' || $method == 'delete') {
+            // signature creation for GET/DELETE
+            $signatureString = 'host: ' . $host
+                . PHP_EOL . 'date: ' . $date
+                . PHP_EOL . 'request-target: ' . $method . ' ' . $url
+                . PHP_EOL . 'v-c-merchant-id: ' . $this->config['organisation_id'];
+            $headerString = 'host date request-target v-c-merchant-id';
+        } elseif ($method == 'post' || $method == 'put' || $method == 'patch') {
+            // signature creation for POST/PUT
+            // Get digest data
+            $digest          = $this->hashMessageBody($messageBody);
+            $signatureString = 'host: ' . $host
+                . PHP_EOL . 'date: ' . $date
+                . PHP_EOL . 'request-target: ' . $method . ' ' . $url
+                . PHP_EOL . 'digest: ' . $digest
+                . PHP_EOL . 'v-c-merchant-id: ' . $this->config['organisation_id'];
+            $headerString = 'host date request-target digest v-c-merchant-id';
+        }
+
+        return $this->accessTokenHeader($signatureString, $headerString);
+    }
+
+    // Purpose: using for access and return the signature token
+    protected function accessTokenHeader($signatureString, $headerString)
+    {
+        $signatureByteString = mb_convert_encoding($signatureString, 'UTF-8', mb_detect_encoding($signatureString));
+        $decodeKey           = base64_decode($this->config['shared_secret']);
+        $signature           = base64_encode(hash_hmac('sha256', $signatureByteString, $decodeKey, true));
+        $signatureHeader     = [
+            'keyid="' . $this->config['key'] . '"',
+            'algorithm="HmacSHA256"',
+            'headers="' . $headerString . '"',
+            'signature="' . $signature . '"',
+        ];
+
+        return implode(', ', $signatureHeader);
+    }
+
+    /**
+     * Perform POST request to Cybersource servers
+     * @param string $url relative path
+     * @param string $data json encoded data
+     * @return array|string
+     */
+    public function doPostRequest($url, $data, $headers = [])
+    {
+        $curl = curl_init();
+
+        $digest = $this->hashMessageBody($data);
+
+        $token = $this->generateToken($url, $data, 'post');
+
+        $headers['Host']            = $this->basehost();
+        $headers['v-c-merchant-id'] = $this->config['organisation_id'];
+        $headers['Signature']       = $token;
+        $headers['Date']            = date('D, d M Y G:i:s ') . 'GMT';
+        $headers['v-c-client-id']   = 'cognito-payum-cybersource';
+        $headers['Digest']          = $digest;
+
+        if (!isset($headers['Accept'])) {
+            $headers['Accept'] = 'application/json';
+        }
+        if (!isset($headers['Content-Type'])) {
+            $headers['Content-Type'] = 'application/json';
+        }
+
+        curl_setopt_array($curl, [
+            CURLOPT_URL            => $this->baseurl() . $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING       => '',
+            CURLOPT_MAXREDIRS      => 10,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST  => 'POST',
+            CURLOPT_HTTPHEADER     => array_map(function ($key, $data) {
+                return $key . ': ' . $data;
+            }, array_keys($headers), $headers),
+            CURLOPT_POSTFIELDS => json_encode($data),
+        ]);
+
+        $response = curl_exec($curl);
+        $err      = curl_error($curl);
+
+        curl_close($curl);
+
+        if ($err) {
+            throw new \Exception($err);
+        }
+        if ($headers['Accept'] == 'application/json') {
+            return json_decode($response, true);
+        }
+
+        return $response;
+    }
+
+    /**
+     * Perform GET request to cybersource servers
+     * @param string $url relative path
+     * @return array
+     */
+    public function doGetRequest($url)
+    {
+        $curl = curl_init();
+
+        curl_setopt_array($curl, [
+            CURLOPT_URL            => $this->baseurl() . $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_ENCODING       => '',
+            CURLOPT_MAXREDIRS      => 10,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
+            CURLOPT_CUSTOMREQUEST  => 'GET',
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json',
+                'Content-Type: application/json',
+            ],
+        ]);
+        $response = curl_exec($curl);
+        $err      = curl_error($curl);
+
+        curl_close($curl);
+
+        if ($err) {
+            throw new \Exception($err);
+        }
+
+        return json_decode($response, true);
     }
 }

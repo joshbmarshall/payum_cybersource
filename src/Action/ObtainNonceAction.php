@@ -37,6 +37,8 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
      */
     public function execute($request)
     {
+        ray(__FILE__ . __FUNCTION__);
+
         /** @var $request ObtainNonce */
         RequestNotSupportedException::assertSupports($this, $request);
 
@@ -45,10 +47,11 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
         if ($model['card']) {
             throw new LogicException('The token has already been set.');
         }
-        $uri = \League\Uri\Http::createFromServer($_SERVER);
 
         $getHttpRequest = new GetHttpRequest();
+        ray($getHttpRequest);
         $this->gateway->execute($getHttpRequest);
+
         // Received payment information from Square
         if (isset($getHttpRequest->request['payment_intent'])) {
             $model['nonce']             = $getHttpRequest->request['payment_intent'];
@@ -69,21 +72,16 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
                 'currencyCode'   => $model['currency'],
                 'intent'         => 'CHARGE',
             ]),
-            'numeric_amount'              => $model['amount'],
-            'currencyCode'                => $model['currency'],
-            'appId'                       => $model['app_id'],
-            'locationId'                  => $model['location_id'],
-            'actionUrl'                   => $getHttpRequest->uri,
-            'imgUrl'                      => $model['img_url'],
-            'billing'                     => $model['billing']  ?? [],
-            'shipping'                    => $model['shipping'] ?? [],
-            'country'                     => $model['country']  ?? 'AU',
-            'use_sandbox'                 => $this->use_sandbox ? 1 : 0,
-            'ship_item'                   => $model['ship_item'] ?? false,
-            'pickupContact'               => json_encode($model['pickup_contact'] ?? null),
-            'afterpay_addresschange_url'  => $model['afterpay_addresschange_url']  ?? false,
-            'afterpay_shippingchange_url' => $model['afterpay_shippingchange_url'] ?? false,
-            'afterpay_shipping_options'   => json_encode($model['afterpay_shipping_options'] ?? []),
+            'numeric_amount' => $model['amount'],
+            'currencyCode'   => $model['currency'],
+            'appId'          => $model['app_id'],
+            'locationId'     => $model['location_id'],
+            'actionUrl'      => $getHttpRequest->uri,
+            'imgUrl'         => $model['img_url'],
+            'billing'        => $model['billing']  ?? [],
+            'shipping'       => $model['shipping'] ?? [],
+            'country'        => $model['country']  ?? 'AU',
+            'use_sandbox'    => $this->use_sandbox ? 1 : 0,
         ]));
 
         throw new HttpResponse($renderTemplate->getResult());
