@@ -55,7 +55,7 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         [$header, $data]     = explode('.', $contextData);
         $contextHeader       = json_decode(base64_decode($header));
         $public_key          = $this->doGetRequest('/flex/v2/public-keys/' . $contextHeader->kid);
-        $captureContext      = \Firebase\JWT\JWT::decode($contextData, \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]], 'RS256'));
+        $captureContext      = \Firebase\JWT\JWT::decode($contextData, \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]], $contextHeader->alg));
         $model['public_key'] = (array) $captureContext->flx->jwk;
 
         ray($model);
