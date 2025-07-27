@@ -64,24 +64,15 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
             'email' => $model['email'] ?? '',
         ];
         $this->gateway->execute($renderTemplate = new RenderTemplate($this->templateName, [
-            'merchant_reference'  => $model['merchant_reference'] ?? '',
-            'amount'              => $model['currencySymbol'] . ' ' . number_format($model['amount'], $model['currencyDigits']),
-            'verificationDetails' => json_encode([
-                'amount'         => number_format($model['amount'], 2, '.', ''),
-                'billingContact' => $billingContact,
-                'currencyCode'   => $model['currency'],
-                'intent'         => 'CHARGE',
-            ]),
-            'numeric_amount' => $model['amount'],
-            'currencyCode'   => $model['currency'],
-            'appId'          => $model['app_id'],
-            'locationId'     => $model['location_id'],
-            'actionUrl'      => $getHttpRequest->uri,
-            'imgUrl'         => $model['img_url'],
-            'billing'        => $model['billing']  ?? [],
-            'shipping'       => $model['shipping'] ?? [],
-            'country'        => $model['country']  ?? 'AU',
-            'use_sandbox'    => $this->use_sandbox ? 1 : 0,
+            'merchant_reference' => $model['merchant_reference'] ?? '',
+            'amount'             => $model['currencySymbol'] . ' ' . number_format($model['amount'], $model['currencyDigits']),
+            'numeric_amount'     => $model['amount'],
+            'currencyCode'       => $model['currency'],
+            'actionUrl'          => $getHttpRequest->uri,
+            'captureContext'     => $model['captureContext'],
+            'contextData'        => $model['contextData'],
+            'public_key'         => $model['public_key'],
+            'imgUrl'             => $model['img_url'],
         ]));
 
         throw new HttpResponse($renderTemplate->getResult());

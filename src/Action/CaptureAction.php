@@ -8,6 +8,7 @@ use Payum\Core\Exception\RequestNotSupportedException;
 use Payum\Core\GatewayAwareInterface;
 use Payum\Core\GatewayAwareTrait;
 use Payum\Core\Request\Capture;
+use Payum\Core\Request\GetHttpRequest;
 use Cognito\PayumCybersource\Request\Api\ObtainNonce;
 
 class CaptureAction implements ActionInterface, GatewayAwareInterface
@@ -39,35 +40,58 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         }
         $uri = \League\Uri\Http::fromServer($_SERVER);
 
+        $getHttpRequest = new GetHttpRequest();
+        $this->gateway->execute($getHttpRequest);
+        // Received flex response information from Cybersource
+        if (isset($getHttpRequest->request['flexresponse'])) {
+            $model['nonce'] = $getHttpRequest->request['flexresponse'];
+        }
+
         $model['organisation_id'] = $this->config['organisation_id'];
         $model['key']             = $this->config['key'];
         $model['shared_secret']   = $this->config['shared_secret'];
 
-        // Get server-side capture context
-        $contextData = $this->doPostRequest('/microform/v2/sessions', [
-            'clientVersion'       => 'v2',
-            'targetOrigins'       => [$uri->getScheme() . '://' . $uri->getHost()],
-            'allowedCardNetworks' => ['VISA', 'MASTERCARD', 'AMEX'],
-            'allowedPaymentTypes' => ['CARD'],
-        ], [
-            'Accept' => 'application/jwt',
-        ]);
-        [$header, $data]     = explode('.', $contextData);
-        $contextHeader       = json_decode(base64_decode($header));
-        $public_key          = $this->doGetRequest('/flex/v2/public-keys/' . $contextHeader->kid);
-        $captureContext      = \Firebase\JWT\JWT::decode($contextData, \Firebase\JWT\JWK::parseKeySet(['keys' => [$public_key]], $contextHeader->alg));
-        $model['public_key'] = (array) $captureContext->flx->jwk;
+        if (!$model->offsetExists('nonce')) {
+            // Get server-side capture context
+            $contextData = $this->doPostRequest('/microform/v2/sessions', [
+                'clientVersion'       => 'v2',
+                'targetOrigins'       => [$uri->getScheme() . '://' . $uri->getHost()],
+                'allowedCardNetworks' => ['VISA', 'MASTERCARD', 'AMEX'],
+                'allowedPaymentTypes' => ['CARD'],
+            ], [
+                'Accept' => 'application/jwt',
+            ]);
+            [$header, $data] = explode('.', $contextData);
+            $contextHeader   = json_decode(base64_decode($header));
+            $public_key      = $this->doGetRequest('/flex/v2/public-keys/' . $contextHeader->kid);
+            $captureContext  = \Firebase\JWT\JWT::decode(
+                $contextData,
+                \Firebase\JWT\JWK::parseKeySet([
+                    'keys' => [$public_key],
+                ], $contextHeader->alg)
+            );
+            $model['captureContext'] = $captureContext->ctx[0]->data;
+            $model['public_key']     = (array) $captureContext->flx->jwk;
+            $model['alg']            = $contextHeader->alg;
+            $model['contextData']    = $contextData;
 
-        ray($model);
+            $obtainNonce = new ObtainNonce($request->getModel());
+            $obtainNonce->setModel($model);
 
-        $obtainNonce = new ObtainNonce($request->getModel());
-        $obtainNonce->setModel($model);
+            $this->gateway->execute($obtainNonce);
+        }
 
-        $this->gateway->execute($obtainNonce);
         if (!$model->offsetExists('status')) {
+            $decodedInfo = \Firebase\JWT\JWT::decode(
+                trim($model['nonce'], '"'),
+                \Firebase\JWT\JWK::parseKeySet([
+                    'keys' => [$model['public_key']],
+                ], $model['alg'])
+            );
+            $model['result'] = $decodedInfo;
+
             $model['status']               = 'success';
             $model['transactionReference'] = 'test';
-            $model['result']               = 'result';
 
             $client = new \Square\SquareClient(
                 token: $this->config['access_token'],

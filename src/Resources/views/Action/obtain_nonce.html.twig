@@ -8,13 +8,60 @@
       <input type="hidden" name="verification_token" id="verification_token" value=""/>
     </form>
 
-    <form id="payment-form">
+    <form id="payment-form" method="post">
     {% if imgUrl %}
 			<img style="max-width: 100%; height: auto;" src="{{ imgUrl }}" />
     {% endif %}
-      <div id="apple-pay-button" style="margin-top: 10px;"></div>
-      <div id="google-pay-button" style="margin-top: 10px;"></div>
-      <div id="card-container" style="margin-top: 10px;"></div>
+      <div id="card-container" style="margin-top: 10px;">
+              <div class="form-group">
+                  <label for="cardholderName">Name</label>
+                  <input id="cardholderName" class="form-control" name="cardholderName" placeholder="Name on the card">
+                  <label id="cardNumber-label">Card Number</label>
+                  <div id="number-container" class="form-control"></div>
+                  <label for="securityCode-container">Security Code</label>
+                  <div id="securityCode-container" class="form-control"></div>
+              </div>
+
+              <div class="form-row">
+                  <div class="form-group col-md-6">
+                      <label for="expMonth">Expiry month</label>
+                      <select id="expMonth" class="form-control">
+                          <option>01</option>
+                          <option>02</option>
+                          <option>03</option>
+                          <option>04</option>
+                          <option>05</option>
+                          <option>06</option>
+                          <option>07</option>
+                          <option>08</option>
+                          <option>09</option>
+                          <option>10</option>
+                          <option>11</option>
+                          <option>12</option>
+                      </select>
+                  </div>
+                  <div class="form-group col-md-6">
+                      <label for="expYear">Expiry year</label>
+                      <select id="expYear" class="form-control">
+                          <option>{{ now | date('Y') }}</option>
+                          <option>{{ now | date('Y') + 1 }}</option>
+                          <option>{{ now | date('Y') + 2 }}</option>
+                          <option>{{ now | date('Y') + 3 }}</option>
+                          <option>{{ now | date('Y') + 4 }}</option>
+                          <option>{{ now | date('Y') + 5 }}</option>
+                          <option>{{ now | date('Y') + 6 }}</option>
+                          <option>{{ now | date('Y') + 7 }}</option>
+                          <option>{{ now | date('Y') + 8 }}</option>
+                          <option>{{ now | date('Y') + 9 }}</option>
+                          <option>{{ now | date('Y') + 10 }}</option>
+                      </select>
+                  </div>
+              </div>
+
+              <input type="hidden" id="flexresponse" name="flexresponse">
+      </div>
+
+
       <button id="card-button" type="button" style="visibility: hidden;">Pay {{ amount }}</button>
       <center style="margin-top: 10px;">
       <small>
@@ -49,235 +96,70 @@
   {% block square_init_js %}
     <script
       type="text/javascript"
-      {% if use_sandbox %}
-      src="https://sandbox.web.squarecdn.com/v1/square.js"
-      {% else %}
-      src="https://web.squarecdn.com/v1/square.js"
-      {% endif %}
+      src="{{ captureContext.clientLibrary }}"
+      integrity="{{ captureContext.clientLibraryIntegrity }}"
+      crossorigin="anonymous"
     ></script>
     <script>
-      const appId = "{{ appId }}"
-      const locationId = "{{ locationId }}"
-      async function initializeCard(payments) {
-        const card = await payments.card();
-        await card.attach('#card-container');
+      const form = document.querySelector('#payment-form');
+      const payButton = document.querySelector('#card-button');
+      const flexResponse = document.querySelector('#flexresponse');
+      const expMonth = document.querySelector('#expMonth');
+      const expYear = document.querySelector('#expYear');
+      const errorsOutput = document.querySelector('#payment-status-container');
 
-        return card;
-      }
+      const flex = new Flex('{{ contextData }}');
 
-      async function tokenize(paymentMethod) {
-        const tokenResult = await paymentMethod.tokenize();
-        if (tokenResult.status === 'OK') {
-          return tokenResult.token;
-        } else {
-          let errorMessage = `Tokenization failed with status: ${tokenResult.status}`;
-          if (tokenResult.errors) {
-            errorMessage += ` and errors: ${JSON.stringify(
-              tokenResult.errors
-            )}`;
-          }
+      const myStyles = {
+        'input': {
+            'font-size': '14px',
+            'font-family': 'helvetica, tahoma, calibri, sans-serif',
+            'color': '#555'
+        },
+        ':focus': { 'color': 'blue' },
+        ':disabled': { 'cursor': 'not-allowed' },
+        'valid': { 'color': '#3c763d' },
+        'invalid': { 'color': '#a94442' }
+      };
 
-          throw new Error(errorMessage);
-        }
-      }
+      const microform = flex.microform("card", { styles: myStyles });
 
-      function buildPaymentRequest(payments) {
-        const req = payments.paymentRequest({
-          countryCode: '{{ country }}',
-          currencyCode: '{{ currencyCode }}',
-          total: {
-            amount: "{{ numeric_amount }}",
-            label: 'Total',
-          },
-          requestShippingContact: {{ ship_item ? 'true' : 'false' }},
-          pickupContact: {{ pickupContact|raw }},
-        });
+      const cardNumber = microform.createField('number', { placeholder: 'Enter card number' });
+      const securityCode = microform.createField('securityCode', { placeholder: '•••' });
 
-        // Note how afterpay has its own listeners
-        req.addEventListener('afterpay_shippingaddresschanged', async function (_address) {
-          {% if afterpay_addresschange_url %}
-          let response = await fetch('{{ afterpay_addresschange_url }}', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json;charset=utf-8'
-            },
-            body: JSON.stringify({
-              merchant_reference: '{{ merchant_reference }}',
-              address: _address
-            })
-          })
-          if (response.ok) {
-            let json = await response.json()
-            return {
-              shippingOptions: json
-            }
-          } else {
-            alert("Could not get shipping options " + response.status)
-          }
-          {% else %}
-          return {
-            shippingOptions: {{ afterpay_shipping_options|raw }}
-          }
-          {% endif %}
-        });
+      cardNumber.load('#number-container');
+      securityCode.load('#securityCode-container');
 
-        req.addEventListener('afterpay_shippingoptionchanged', function (_option) {
-          {% if afterpay_shippingchange_url %}
-          fetch('{{ afterpay_shippingchange_url }}', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json;charset=utf-8'
-            },
-            body: JSON.stringify({
-              merchant_reference: '{{ merchant_reference }}',
-              option: _option
-            })
-          })
-          {% endif %}
-        });
-
-        return req;
-      }
-
-      async function initializeApplePay(payments) {
-        const paymentRequest = buildPaymentRequest(payments)
-        const applePay = await payments.applePay(paymentRequest);
-        return applePay;
-      }
-
-      async function initializeGooglePay(payments) {
-        const paymentRequest = buildPaymentRequest(payments)
-
-        const googlePay = await payments.googlePay(paymentRequest);
-        await googlePay.attach('#google-pay-button');
-
-        return googlePay;
-      }
-
-      async function initializeAfterpay(payments) {
-        const paymentRequest = buildPaymentRequest(payments)
-
-        const afterpay = await payments.afterpayClearpay(paymentRequest);
-        await afterpay.attach('#afterpay-button');
-
-        return afterpay;
-      }
-
-      // status is either SUCCESS or FAILURE;
-      function displayPaymentResults(status) {
-        const statusContainer = document.getElementById(
-          'payment-status-container'
-        );
-        if (status === 'SUCCESS') {
-          statusContainer.classList.remove('is-failure');
-          statusContainer.classList.add('is-success');
-        } else {
-          statusContainer.classList.remove('is-success');
-          statusContainer.classList.add('is-failure');
-        }
-
-        statusContainer.style.visibility = 'visible';
-      }
-
-      document.addEventListener('DOMContentLoaded', async function () {
-        if (!window.Square) {
-          throw new Error('Square.js failed to load properly');
-        }
-
-        let payments;
-        try {
-          payments = window.Square.payments(appId, locationId);
-        } catch {
-          const statusContainer = document.getElementById(
-            'payment-status-container'
-          );
-          statusContainer.className = 'missing-credentials';
-          statusContainer.style.visibility = 'visible';
-          return;
-        }
-
-        let applePay;
-        try {
-          applePay = await initializeApplePay(payments);
-        } catch (e) {
-          console.error('Initializing Apple Pay failed', e);
-        }
-
-        let googlePay;
-        try {
-          googlePay = await initializeGooglePay(payments);
-        } catch (e) {
-          console.error('Initializing Google Pay failed', e);
-        }
-
-        let card;
-        try {
-          card = await initializeCard(payments);
-        } catch (e) {
-          console.error('Initializing Card failed', e);
-          return;
-        }
 
         // Show Pay button
-        document.getElementById('card-button').style.visibility = 'visible'
+        payButton.style.visibility = 'visible'
 
-        async function verifyBuyer(payments, token) {
-          const verificationDetails = {{ verificationDetails|raw }}
-          const verificationResults = await payments.verifyBuyer(
-            token,
-            verificationDetails
-          );
-          return verificationResults.token;
-        }
 
-        // Checkpoint 2.
+    // Configuring a Listener for the Pay button
+    payButton.addEventListener('click', function () {
 
-        if (applePay !== undefined) {
-          const applePayButton = document.getElementById('apple-pay-button');
-          applePayButton.addEventListener('click', async function (event) {
-            await handlePaymentMethodSubmission(event, applePay);
-          });
-        }
-
-        if (googlePay !== undefined) {
-          const googlePayButton = document.getElementById('google-pay-button');
-          googlePayButton.addEventListener('click', async function (event) {
-            await handlePaymentMethodSubmission(event, googlePay);
-          });
-        }
-
-        if (afterpay !== undefined) {
-          const afterpayButton = document.getElementById('afterpay-button');
-          afterpayButton.addEventListener('click', async function (event) {
-            await handlePaymentMethodSubmission(event, afterpay);
-          });
-        }
-
-        async function handlePaymentMethodSubmission(event, paymentMethod, shouldVerify = false) {
-          event.preventDefault();
-
-          // disable the submit button as we await tokenization and make a payment request.
-          cardButton.disabled = true;
-          const token = await tokenize(paymentMethod);
-          let verificationToken = '';
-
-          if (shouldVerify) {
-            verificationToken = await verifyBuyer(
-              payments,
-              token
-            );
-          }
-
-          document.querySelector('#payment_intent').value = token;
-          document.querySelector('#verification_token').value = verificationToken;
-          document.querySelector('#square-payment-form').submit();
-        }
-
-        const cardButton = document.getElementById('card-button');
-        cardButton.addEventListener('click', async function (event) {
-          await handlePaymentMethodSubmission(event, card, true);
+        // Compiling MM & YY into optional parameters
+        const options = {
+            expirationMonth: document.querySelector('#expMonth').value,
+            expirationYear: document.querySelector('#expYear').value
+        };
+        //
+        microform.createToken(options, function (err, token) {
+            if (err) {
+                // handle error
+                console.error(err);
+                errorsOutput.textContent = err.message;
+            } else {
+                // At this point you may pass the token back to your server as you wish.
+                // In this example we append a hidden input to the form and submit it.
+                console.log(JSON.stringify(token));
+                flexResponse.value = JSON.stringify(token);
+                form.submit();
+            }
         });
-      });
+    });
+
+
     </script>
   {% endblock %}
 {% endblock %}
