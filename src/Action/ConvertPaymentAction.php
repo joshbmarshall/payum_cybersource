@@ -22,7 +22,6 @@ class ConvertPaymentAction implements ActionInterface, GatewayAwareInterface
      */
     public function execute($request)
     {
-        ray(__FILE__ . __FUNCTION__);
         RequestNotSupportedException::assertSupports($this, $request);
 
         /** @var PaymentInterface $payment */

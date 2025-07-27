@@ -53,6 +53,25 @@ $payment->setNumber(uniqid());
 $payment->setCurrencyCode($currency);
 $payment->setTotalAmount(100); // Total cents
 $payment->setDescription(substr($description, 0, 45));
+$payment->setDetails([
+    'local' => [
+        'email' => $email,
+    ],
+    'payment_reference' => 'ABC-123',
+    'billing' => [
+        'first_name' => $customer['first_name'],
+        'last_name'  => $customer['last_name'],
+        'email'      => $customer['email'],
+        'address'    => [
+            'line1'       => $customer_address['line1'],
+            'line2'       => $customer_address['line2'],
+            'city'        => $customer_address['city'],
+            'state'       => $customer_address['state'],
+            'country'     => $customer_address['country'],
+            'postal_code' => $customer_address['postal_code'],
+        ],
+    ],
+]);
 $storage->setInternalDetails($payment, $request);
 
 $captureToken = $payum->getTokenFactory()->createCaptureToken('cybersource', $payment, 'done.php');

@@ -91,30 +91,28 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
                 );
                 $model['result'] = $decodedInfo;
 
-                ray($decodedInfo);
-
-                // TODO real information
                 $data = $this->doPostRequest('/pts/v2/payments', [
                     'clientReferenceInformation' => [
-                        'code' => 'TC50171_3' . rand(0, 1000),
+                        'code' => $model['payment_reference'],
                     ],
                     'processingInformation' => [
                         'capture' => true,
                     ],
                     'orderInformation' => [
                         'amountDetails' => [
-                            'totalAmount' => '102.21',
-                            'currency'    => 'AUD',
+                            'totalAmount' => $model['amount'],
+                            'currency'    => $model['currency'],
                         ],
                         'billTo' => [
-                            'firstName'          => 'RTS',
-                            'lastName'           => 'VDP',
-                            'address1'           => '201 S. Division St.',
-                            'locality'           => 'Ann Arbor',
-                            'administrativeArea' => 'MI',
-                            'postalCode'         => '48104-2201',
-                            'country'            => 'US',
-                            'email'              => 'test@cybs.com',
+                            'firstName'          => $model['billing']['first_name'],
+                            'lastName'           => $model['billing']['last_name'],
+                            'email'              => $model['billing']['email'],
+                            'address1'           => $model['billing']['address']['line1'],
+                            'address2'           => $model['billing']['address']['line2'] ?? '',
+                            'locality'           => $model['billing']['address']['city'],
+                            'administrativeArea' => $model['billing']['address']['state'],
+                            'postalCode'         => $model['billing']['address']['postal_code'],
+                            'country'            => $model['billing']['address']['country'],
                         ],
                     ],
                     'tokenInformation' => [
