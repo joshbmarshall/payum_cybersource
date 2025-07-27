@@ -37,8 +37,6 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
      */
     public function execute($request)
     {
-        ray(__FILE__ . __FUNCTION__);
-
         /** @var $request ObtainNonce */
         RequestNotSupportedException::assertSupports($this, $request);
 
@@ -49,20 +47,8 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
         }
 
         $getHttpRequest = new GetHttpRequest();
-        ray($getHttpRequest);
         $this->gateway->execute($getHttpRequest);
 
-        // Received payment information from Square
-        if (isset($getHttpRequest->request['payment_intent'])) {
-            $model['nonce']             = $getHttpRequest->request['payment_intent'];
-            $model['verificationToken'] = $getHttpRequest->request['verification_token'];
-
-            return;
-        }
-
-        $billingContact = [
-            'email' => $model['email'] ?? '',
-        ];
         $this->gateway->execute($renderTemplate = new RenderTemplate($this->templateName, [
             'merchant_reference' => $model['merchant_reference'] ?? '',
             'amount'             => $model['currencySymbol'] . ' ' . number_format($model['amount'], $model['currencyDigits']),
@@ -71,7 +57,6 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
             'actionUrl'          => $getHttpRequest->uri,
             'captureContext'     => $model['captureContext'],
             'contextData'        => $model['contextData'],
-            'public_key'         => $model['public_key'],
             'imgUrl'             => $model['img_url'],
         ]));
 

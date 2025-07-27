@@ -44,7 +44,7 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         $this->gateway->execute($getHttpRequest);
         // Received flex response information from Cybersource
         if (isset($getHttpRequest->request['flexresponse'])) {
-            $model['nonce'] = $getHttpRequest->request['flexresponse'];
+            $model['nonce'] = trim($getHttpRequest->request['flexresponse'], '"');
         }
 
         $model['organisation_id'] = $this->config['organisation_id'];
@@ -82,109 +82,59 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         }
 
         if (!$model->offsetExists('status')) {
-            $decodedInfo = \Firebase\JWT\JWT::decode(
-                trim($model['nonce'], '"'),
-                \Firebase\JWT\JWK::parseKeySet([
-                    'keys' => [$model['public_key']],
-                ], $model['alg'])
-            );
-            $model['result'] = $decodedInfo;
-
-            $model['status']               = 'success';
-            $model['transactionReference'] = 'test';
-
-            $client = new \Square\SquareClient(
-                token: $this->config['access_token'],
-                options: [
-                    'baseUrl' => $this->config['sandbox'] ? \Square\Environments::Sandbox->value : \Square\Environments::Production->value,
-                ]
-            );
-
-            $amount_money = new \Square\Types\Money();
-            $amount_money->setAmount(round($model['amount'] * 100));
-            $amount_money->setCurrency($model['currency']);
-
-            $body = new \Square\Payments\Requests\CreatePaymentRequest([
-                'sourceId'       => $model['nonce'],
-                'idempotencyKey' => $request->getToken()->getHash(),
-            ]);
-            $body->setAmountMoney($amount_money);
-
-            $item_name      = $model['square_item_name']  ?? false;
-            $line_items     = $model['square_line_items'] ?? [];
-            $order_discount = $model['square_discount']   ?? 0;
-
-            if ($item_name) {
-                $line_items[] = [
-                    'name'   => $item_name,
-                    'qty'    => 1,
-                    'amount' => $model['amount'],
-                ];
-            }
-
-            if ($line_items) {
-                // Add Order
-                $order = new \Square\Types\Order([
-                    'locationId' => $model['location_id'],
-                ]);
-                $order_line_items = [];
-                foreach ($line_items as $line_item) {
-                    $order_line_item = new \Square\Types\OrderLineItem([
-                        'quantity' => $line_item['qty'],
-                    ]);
-                    $order_line_item->setCatalogObjectId($this->getSquareCatalogueObject($client, $line_item['name']));
-
-                    $line_amount_money = new \Square\Types\Money();
-                    $line_amount_money->setAmount(round($line_item['amount'] * 100));
-                    $line_amount_money->setCurrency($model['currency']);
-                    $order_line_item->setBasePriceMoney($line_amount_money);
-                    if ($line_item['note'] ?? '') {
-                        $order_line_item->setNote($line_item['note']);
-                    }
-
-                    $order_line_items[] = $order_line_item;
-                }
-                $order->setLineItems($order_line_items);
-
-                $orderbody = new \Square\Types\CreateOrderRequest();
-                $orderbody->setOrder($order);
-                $orderbody->setIdempotencyKey(uniqid());
-
-                try {
-                    $order_api_response = $client->orders->create($orderbody);
-                    $order_id           = $order_api_response->getOrder()->getId();
-                } catch (\Square\Exceptions\SquareApiException $e) {
-                    $model['status'] = 'failed';
-                    $model['error']  = 'failed';
-                    foreach ($e->getErrors() as $error) {
-                        $model['error'] = $error->getDetail();
-                    }
-                }
-
-                if ($order_id) {
-                    $body->setOrderId($order_id);
-                }
-            }
-
-            $body->setAutocomplete(true);
-            $body->setVerificationToken($model['verificationToken']);
-            $body->setCustomerId($model['customer_id'] ?? null);
-            $body->setLocationId($model['location_id']);
-            $body->setReferenceId($model['reference_id'] ?? null);
-            $body->setNote($model['description']);
-
             try {
-                $api_response                  = $client->payments->create($body);
-                $resultPayment                 = $api_response->getPayment();
-                $model['status']               = 'success';
-                $model['transactionReference'] = $resultPayment->getId();
-                $model['result']               = $resultPayment;
-            } catch (\Square\Exceptions\SquareApiException $e) {
-                $model['status'] = 'failed';
-                $model['error']  = 'failed';
-                foreach ($e->getErrors() as $error) {
-                    $model['error'] = $error->getDetail();
+                $decodedInfo = \Firebase\JWT\JWT::decode(
+                    $model['nonce'],
+                    \Firebase\JWT\JWK::parseKeySet([
+                        'keys' => [$model['public_key']],
+                    ], $model['alg'])
+                );
+                $model['result'] = $decodedInfo;
+
+                ray($decodedInfo);
+
+                // TODO real information
+                $data = $this->doPostRequest('/pts/v2/payments', [
+                    'clientReferenceInformation' => [
+                        'code' => 'TC50171_3' . rand(0, 1000),
+                    ],
+                    'processingInformation' => [
+                        'capture' => true,
+                    ],
+                    'orderInformation' => [
+                        'amountDetails' => [
+                            'totalAmount' => '102.21',
+                            'currency'    => 'AUD',
+                        ],
+                        'billTo' => [
+                            'firstName'          => 'RTS',
+                            'lastName'           => 'VDP',
+                            'address1'           => '201 S. Division St.',
+                            'locality'           => 'Ann Arbor',
+                            'administrativeArea' => 'MI',
+                            'postalCode'         => '48104-2201',
+                            'country'            => 'US',
+                            'email'              => 'test@cybs.com',
+                        ],
+                    ],
+                    'tokenInformation' => [
+                        'jti' => $decodedInfo->jti,
+                    ],
+                ]);
+                $model['result'] = $data;
+                if (isset($data['response'])) {
+                    throw new \Exception($data['response']['msg']);
                 }
+
+                if ($data['status'] != 'AUTHORIZED') {
+                    throw new \Exception('Error: status is ' . $data['status']);
+                }
+
+                $model['status']               = 'success';
+                $model['transactionReference'] = $data['id'];
+            } catch (\Exception $e) {
+                $model['status'] = 'failed';
+                $model['error']  = $e->getMessage();
             }
         }
     }
@@ -286,9 +236,6 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         $headers['v-c-client-id']   = 'cognito-payum-cybersource';
         $headers['Digest']          = $digest;
 
-        if (!isset($headers['Accept'])) {
-            $headers['Accept'] = 'application/json';
-        }
         if (!isset($headers['Content-Type'])) {
             $headers['Content-Type'] = 'application/json';
         }
@@ -315,7 +262,8 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         if ($err) {
             throw new \Exception($err);
         }
-        if ($headers['Accept'] == 'application/json') {
+
+        if (!isset($headers['Accept'])) {
             return json_decode($response, true);
         }
 
