@@ -191,6 +191,9 @@
   .w-\[80vw\] {
     width: 80vw;
   }
+  .max-w-3\/4 {
+    max-width: calc(3/4 * 100%);
+  }
   .max-w-full {
     max-width: 100%;
   }
@@ -208,6 +211,9 @@
   }
   .p-8 {
     padding: calc(var(--spacing) * 8);
+  }
+  .text-center {
+    text-align: center;
   }
   .align-middle {
     vertical-align: middle;
