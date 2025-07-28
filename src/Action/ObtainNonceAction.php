@@ -11,7 +11,6 @@ use Payum\Core\GatewayAwareInterface;
 use Payum\Core\GatewayAwareTrait;
 use Payum\Core\Reply\HttpResponse;
 use Payum\Core\Request\GetHttpRequest;
-use Payum\Core\Request\RenderTemplate;
 
 class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
 {
@@ -66,9 +65,12 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
 
     private function renderTemplate($vars)
     {
+        ob_start();
         extract($vars);
 
         include dirname(__DIR__) . '/Resources/views/Action/obtain_nonce.php';
+
+        return ob_get_clean();
     }
 
     /**
