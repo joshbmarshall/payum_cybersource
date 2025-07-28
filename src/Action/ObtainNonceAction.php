@@ -49,7 +49,7 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
         $getHttpRequest = new GetHttpRequest();
         $this->gateway->execute($getHttpRequest);
 
-        $this->gateway->execute($renderTemplate = new RenderTemplate($this->templateName, [
+        throw new HttpResponse($this->renderTemplate([
             'merchant_reference' => $model['merchant_reference'] ?? '',
             'amount'             => $model['currencySymbol'] . ' ' . number_format($model['amount'], $model['currencyDigits']),
             'numeric_amount'     => $model['amount'],
@@ -58,9 +58,17 @@ class ObtainNonceAction implements ActionInterface, GatewayAwareInterface
             'captureContext'     => $model['captureContext'],
             'contextData'        => $model['contextData'],
             'imgUrl'             => $model['img_url'],
+            'tailwindcss'        => file_get_contents(dirname(__DIR__) . '/Resources/views/Action/style.css'),
         ]));
 
         throw new HttpResponse($renderTemplate->getResult());
+    }
+
+    private function renderTemplate($vars)
+    {
+        extract($vars);
+
+        include dirname(__DIR__) . '/Resources/views/Action/obtain_nonce.php';
     }
 
     /**

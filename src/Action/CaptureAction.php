@@ -50,6 +50,7 @@ class CaptureAction implements ActionInterface, GatewayAwareInterface
         $model['organisation_id'] = $this->config['organisation_id'];
         $model['key']             = $this->config['key'];
         $model['shared_secret']   = $this->config['shared_secret'];
+        $model['img_url']         = $this->config['img_url'] ?? '';
 
         if (!$model->offsetExists('nonce')) {
             // Get server-side capture context

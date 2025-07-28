@@ -20,7 +20,7 @@ class CybersourceGatewayFactory extends GatewayFactory
             'payum.factory_name'  => 'cybersource',
             'payum.factory_title' => 'cybersource',
 
-            'payum.template.obtain_nonce' => '@PayumCybersource/Action/obtain_nonce.html.twig',
+            'payum.template.obtain_nonce' => '@PayumCybersource/Action/obtain_nonce.html.php',
 
             'payum.action.capture' => function (ArrayObject $config) {
                 return new CaptureAction($config);
