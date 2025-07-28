@@ -228,7 +228,7 @@
     }
   }
 }
-input {
+input, .flex-microform, select {
   border-radius: 6px;
   margin-bottom: 6px;
   padding: 12px;
@@ -242,7 +242,7 @@ button {
   background: #5469d4;
   color: #ffffff;
   font-family: Arial, sans-serif;
-  border-radius: 0 0 4px 4px;
+  border-radius: 4px;
   border: 0;
   padding: 12px 16px;
   font-size: 16px;
